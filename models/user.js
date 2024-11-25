@@ -1,56 +1,47 @@
 const mongoose = require('mongoose');
-const { Schema } = mongoose;
+const bcrypt = require('bcrypt');
 
-const userSchema = new Schema({
-  name: {
-    type: String,
-    required: [true, "User's name is required"],
-    trim: true
-  },
-  email: {
-    type: String,
-    required: [true, "User's email is required"],
-    unique: true,
-    match: [/^.+@.+$/, "Invalid email format"]
-  },
-  role: {
-    type: String,
-    required: [true, "User's role is required"],
-    enum: ['driver', 'dispatcher']
-  },
-  phone: {
-    type: String,
-    match: [/^[0-9]{9}$/, "Phone number must be 9 digits"],
-    required: function() {
-      return this.role === 'driver'; 
+const SALT_ROUNDS = 10;
+
+const userSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    },
+    password: {
+        type: String,
+        required: true
+    },
+    role: {
+        type: String,
+        enum: ['driver', 'dispatcher'],
+        required: true
+    },
+    created_at: {
+        type: Date,
+        default: Date.now
+    },
+    updated_at: {
+        type: Date,
+        default: Date.now
     }
-  },
-  license_number: {
-    type: String,
-    default: null,
-    required: function() {
-      return this.role === 'driver'; 
-    }
-  },
-  availability: {
-    type: Boolean,
-    default: null
-  },
-  created_at: {
-    type: Date,
-    required: [true, "Creation date is required"],
-    default: Date.now
-  },
-  updated_at: {
-    type: Date,
-    required: [true, "Update date is required"],
-    default: Date.now
-  }
 });
 
-userSchema.pre('save', function (next) {
-  this.updated_at = new Date();
-  next();
+  userSchema.pre('save', async function (next) {
+    if (this.isModified('password')) {
+        this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
+    }
+    next();
 });
+
+userSchema.methods.isPasswordValid = async function (password) {
+    return await bcrypt.compare(password, this.password);
+};
 
 module.exports = mongoose.model('User', userSchema);
