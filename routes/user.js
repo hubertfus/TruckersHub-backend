@@ -1,15 +1,22 @@
 const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const User = require("../models/user");
+const DriversView = require('../models/Driversview');
 
-router.get("/", async (_, res) => {
+router.get("/", async (req, res) => {
     try {
-        const users = await User.find();
-        res.json(users);
+        const { sort = 'name' } = req.query;
+        const sortOption = { [sort]: 1 };
+        const drivers = await DriversView.find().sort(sortOption);
+
+        res.json(drivers);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error fetching drivers:", error.message);
+        res.status(500).json({ message: "An error occurred while fetching the drivers." });
     }
 });
+
+
 
 router.get("/:id", async (req, res) => {
     try {
@@ -24,22 +31,21 @@ router.get("/:id", async (req, res) => {
 router.post("/register", async (req, res) => {
     try {
         const { name, email, password, role, phone, license_number } = req.body;
-
         if (!name || !email || !password || !role) {
             return res.status(400).json({ message: "Name, email, password, and role are required." });
         }
-
+        
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: "Email is already in use." });
         }
-
         const newUser = new User({ name, email, password, role, phone, license_number });
-        await newUser.save();
+        await newUser.save(newUser);
 
         res.status(201).json({ message: "User registered successfully.", userId: newUser._id });
     } catch (error) {
         res.status(500).json({ message: error.message });
+        console.log(error.message)
     }
 });
 
