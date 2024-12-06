@@ -26,7 +26,7 @@ const isAuthorized = async (order, action, userId) => {
         }
 
         if (action === 'delete') {
-            return userRole === 'dispatcher'; // Only dispatchers can delete orders
+            return userRole === 'dispatcher'; 
         }
 
         return false;
@@ -36,7 +36,6 @@ const isAuthorized = async (order, action, userId) => {
     }
 };
 
-// GET orders
 router.get('/', async (req, res) => {
     try {
         const { driverId, role } = req.query;
@@ -108,7 +107,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST accept order
 router.post('/accept', async (req, res) => {
     const { userId, orderId } = req.body;
     if (!userId || !orderId ) {
@@ -139,7 +137,6 @@ router.post('/accept', async (req, res) => {
     }
 });
 
-// POST cancel order
 router.post('/cancel', async (req, res) => {
     const { userId, orderId} = req.body;
 
@@ -171,7 +168,6 @@ router.post('/cancel', async (req, res) => {
     }
 });
 
-// POST complete order
 router.post('/complete', async (req, res) => {
     const { userId, orderId} = req.body;
 
@@ -293,5 +289,59 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
+
+router.post('/create', async (req, res) => {
+    const {
+        order_number,
+        load_details,
+        pickup_address,
+        delivery_address,
+        vehicle_id,
+        assigned_driver,
+        estimated_delivery_time
+    } = req.body;
+
+    if (!order_number || !load_details || !pickup_address || !delivery_address) {
+        return res.status(400).json({ message: "Missing required fields." });
+    }
+
+
+    let session = null;
+
+    try {
+        if (mongoose.connection.readyState === 1 && mongoose.connection.client.s.options.replicaSet) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+        }
+    
+        const newOrder = new Order({
+            order_number,
+            load_details,
+            pickup_address,
+            delivery_address,
+            vehicle_id: vehicle_id || null,
+            assigned_driver: assigned_driver || null,
+            estimated_delivery_time: estimated_delivery_time || null,
+            status: 'created',
+            created_at: new Date(),
+            updated_at: new Date()
+        });
+    
+        const savedOrder = await newOrder.save(session ? { session } : undefined);
+    
+        if (session) await session.commitTransaction();
+    
+        res.status(201).json(savedOrder);
+    } catch (error) {
+        if (session) await session.abortTransaction();
+        console.error("Error creating new order:", error);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        if (session) session.endSession();
+    }
+});
+
 
 module.exports = router;
