@@ -51,6 +51,8 @@ const userSchema = new mongoose.Schema({
 
 userSchema.methods.updateAvailability = async function () {
     const assignedOrders = await Order.find({ assigned_driver: this._id });
+    console.log(assignedOrders)
+    console.log("chuj4")
 
     this.availability = assignedOrders.length === 0;
 

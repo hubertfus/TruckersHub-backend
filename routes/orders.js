@@ -2,6 +2,7 @@ const router = require('express').Router();
 const mongoose = require('mongoose');
 const Order = require('../models/order');
 const User = require('../models/user');
+const updateDriverAvailability = require('../services/updateDriverAvailability');
 
 const isAuthorized = async (order, action, userId) => {
     try {
@@ -218,7 +219,7 @@ router.delete('/:id', async (req, res) => {
         }
 
         await Order.findByIdAndDelete(orderId);
-
+        updateDriverAvailability(order.assigned_driver)
         res.status(200).json({ message: "Order deleted successfully" });
     } catch (error) {
         console.error("Error deleting order:", error);
@@ -401,6 +402,105 @@ router.post('/assign-driver', async (req, res) => {
     }
 });
 
+router.post('/assign-vehicle', async (req, res) => {
+    const { orderId, vehicleId, dispatcherId } = req.body;
+
+    if (!orderId || !vehicleId || !dispatcherId) {
+        return res.status(400).json({ message: "Missing required fields: orderId, vehicleId, dispatcherId" });
+    }
+
+    let session = null;
+
+    try {
+        if (mongoose.connection.readyState === 1 && mongoose.connection.client.s.options.replicaSet) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+        }
+
+        const order = await Order.findById(orderId).session(session);
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        const vehicle = await mongoose.model('Vehicle').findById(vehicleId).session(session);
+        if (!vehicle) {
+            throw new Error("Vehicle not found");
+        }
+
+        const dispatcher = await User.findById(dispatcherId).session(session);
+        if (!dispatcher || dispatcher.role !== 'dispatcher') {
+            throw new Error("Dispatcher not found or invalid role");
+        }
+
+        order.vehicle_id = vehicleId;
+        order.updated_at = new Date();
+
+        const vehicleInfo = `${vehicle.brand} ${vehicle.model} ${vehicle.license_plate}`;
+
+        await order.save({ session });
+
+        if (session) await session.commitTransaction();
+
+        res.status(200).json({
+            message: "Vehicle assigned successfully",
+            order: {
+                ...order.toObject(),
+                vehicle_info: vehicleInfo,
+            },
+        });
+    } catch (error) {
+        if (session) await session.abortTransaction();
+        console.error("Error assigning vehicle:", error);
+        res.status(500).json({ message: error.message });
+    } finally {
+        if (session) session.endSession();
+    }
+});
+
+
+router.put('/update', async (req, res) => {
+    const { orderId, updatedOrderData, dispatcherId } = req.body;
+
+    if (!orderId || !dispatcherId || !updatedOrderData) {
+        return res.status(400).json({ message: "Missing required fields: orderId, dispatcherId, updatedOrderData" });
+    }
+
+    let session = null;
+
+    try {
+        if (mongoose.connection.readyState === 1 && mongoose.connection.client.s.options.replicaSet) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+        }
+
+        const order = await Order.findById(orderId).session(session);
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        const dispatcher = await User.findById(dispatcherId).session(session);
+        if (!dispatcher || dispatcher.role !== 'dispatcher') {
+            throw new Error("Dispatcher not found or invalid role");
+        }
+
+        order.set(updatedOrderData);
+
+        await order.save({ session });
+
+        if (session) await session.commitTransaction();
+
+        res.status(200).json({
+            message: "Order updated successfully",
+            order: order,
+        });
+    } catch (error) {
+        if (session) await session.abortTransaction();
+        console.error("Error updating order:", error);
+        res.status(500).json({ message: error.message });
+    } finally {
+        if (session) session.endSession();
+    }
+});
 
 
 module.exports = router;
