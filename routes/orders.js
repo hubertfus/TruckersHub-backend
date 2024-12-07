@@ -343,5 +343,64 @@ router.post('/create', async (req, res) => {
     }
 });
 
+router.post('/assign-driver', async (req, res) => {
+    const { orderId, driverId, dispatcherId } = req.body;
+
+    if (!orderId || !driverId || !dispatcherId) {
+        return res.status(400).json({ message: "Missing required fields: orderId, driverId, dispatcherId" });
+    }
+
+    let session = null;
+
+    try {
+        if (mongoose.connection.readyState === 1 && mongoose.connection.client.s.options.replicaSet) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+        }
+
+        const order = await Order.findById(orderId).session(session);
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        const driver = await User.findById(driverId).session(session);
+        if (!driver || driver.role !== 'driver') {
+            throw new Error("Driver not found or invalid role");
+        }
+
+        const dispatcher = await User.findById(dispatcherId).session(session);
+        if (!dispatcher || dispatcher.role !== 'dispatcher') {
+            throw new Error("Dispatcher not found or invalid role");
+        }
+
+        order.assigned_driver = driverId;
+        order.status = 'in_progress';
+        
+        const driverInfo = driver.name;
+
+        await order.save({ session });
+
+        driver.availability = false;
+        await driver.save({ session });
+
+        if (session) await session.commitTransaction();
+
+        res.status(200).json({
+            message: "Driver assigned successfully",
+            order: {
+                ...order.toObject(),
+                driver_info: driverInfo, 
+            },
+        });
+    } catch (error) {
+        if (session) await session.abortTransaction();
+        console.error("Error assigning driver:", error);
+        res.status(500).json({ message: error.message });
+    } finally {
+        if (session) session.endSession();
+    }
+});
+
+
 
 module.exports = router;

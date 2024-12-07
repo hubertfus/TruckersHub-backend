@@ -5,10 +5,15 @@ const DriversView = require('../models/Driversview');
 
 router.get("/", async (req, res) => {
     try {
-        const { sort = 'name' } = req.query;
+        const { sort = 'name', available } = req.query;
         const sortOption = { [sort]: 1 };
-        const drivers = await DriversView.find().sort(sortOption);
+        
+        const query = {};
+        if (available !== undefined) {
+            query.availability = available === 'true'; 
+        }
 
+        const drivers = await DriversView.find(query).sort(sortOption);
         res.json(drivers);
     } catch (error) {
         console.error("Error fetching drivers:", error.message);
