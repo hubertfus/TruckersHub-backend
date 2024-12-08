@@ -2,24 +2,53 @@ const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const User = require("../models/user");
 const DriversView = require('../models/Driversview');
+const mongoose = require('mongoose');
 
 router.get("/", async (req, res) => {
     try {
-        const { sort = 'name', available } = req.query;
+        const { sort = 'name', available, userId } = req.query;
         const sortOption = { [sort]: 1 };
-        
-        const query = {};
-        if (available !== undefined) {
-            query.availability = available === 'true'; 
+
+        const pipeline = [];
+
+        if (available !== undefined || userId) {
+            const orConditions = [];
+
+            if (available !== undefined) {
+                orConditions.push({
+                    availability: available === 'true',
+                });
+            }
+
+            if (userId) {
+                orConditions.push({
+                    _id: new mongoose.Types.ObjectId(userId),
+                });
+            }
+            if (orConditions.length > 0) {
+                pipeline.push({
+                    $match: {
+                        $or: orConditions
+                    }
+                });
+            }
         }
 
-        const drivers = await DriversView.find(query).sort(sortOption);
+        pipeline.push({
+            $sort: sortOption
+        });
+
+        const drivers = await DriversView.aggregate(pipeline);
+
         res.json(drivers);
     } catch (error) {
         console.error("Error fetching drivers:", error.message);
         res.status(500).json({ message: "An error occurred while fetching the drivers." });
     }
 });
+
+
+
 
 
 

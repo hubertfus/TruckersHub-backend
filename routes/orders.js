@@ -373,17 +373,20 @@ router.post('/assign-driver', async (req, res) => {
         if (!dispatcher || dispatcher.role !== 'dispatcher') {
             throw new Error("Dispatcher not found or invalid role");
         }
-
+        let oldDriver
+        if(order.assigned_driver){
+            oldDriver = order.assigned_driver
+        }
         order.assigned_driver = driverId;
         order.status = 'in_progress';
         
         const driverInfo = driver.name;
-
+        
         await order.save({ session });
 
         driver.availability = false;
         await driver.save({ session });
-
+        updateDriverAvailability(oldDriver)
         if (session) await session.commitTransaction();
 
         res.status(200).json({
