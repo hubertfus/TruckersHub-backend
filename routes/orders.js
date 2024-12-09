@@ -39,17 +39,16 @@ const isAuthorized = async (order, action, userId) => {
 
 router.get('/', async (req, res) => {
     try {
-        const { driverId, role } = req.query;
+        const { driverId, role, createdAndWtihNoVehicleAssigned } = req.query;
 
         const matchConditions = role === 'dispatcher'
-            ? {} 
+            ?  createdAndWtihNoVehicleAssigned ? { vehicle_id: null, status: "in_progress"} : {} 
             : {
                 $or: [
                     { assigned_driver: new mongoose.Types.ObjectId(driverId) },
-                    { assigned_driver: null }
+                    { assigned_driver: null },
                 ]
             };
-
         const orders = await Order.aggregate([
             {
                 $match: matchConditions
