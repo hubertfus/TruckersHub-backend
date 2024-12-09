@@ -156,4 +156,26 @@ router.put("/edit/:id", async (req, res) => {
     }
 });
 
+router.delete("/delete/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user ID." });
+        }
+
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        await User.findByIdAndDelete(id);
+
+        res.status(200).json({ message: "User deleted successfully." });
+    } catch (error) {
+        console.error("Error deleting user:", error.message);
+        res.status(500).json({ message: "An error occurred while deleting the user." });
+    }
+});
+
 module.exports = router;
