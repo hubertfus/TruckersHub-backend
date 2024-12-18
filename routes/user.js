@@ -11,31 +11,53 @@ router.get("/", async (req, res) => {
 
         const pipeline = [];
 
-        if (available !== undefined || userId) {
-            const orConditions = [];
-
-            if (available !== undefined) {
-                orConditions.push({
-                    availability: available === 'true',
-                });
-            }
-
-            if (userId) {
-                orConditions.push({
+        if (userId) {
+            pipeline.push({
+                $match: {
                     _id: new mongoose.Types.ObjectId(userId),
-                });
+                },
+            });
+        }
+
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "orders", 
+                    localField: "_id", 
+                    foreignField: "assigned_driver", 
+                    as: "assigned_orders",
+                },
+            },
+            {
+                $addFields: {
+                    availability: {
+                        $eq: [
+                            {
+                                $size: {
+                                    $filter: {
+                                        input: "$assigned_orders",
+                                        as: "order",
+                                        cond: { $eq: ["$$order.status", "in_progress"] },
+                                    },
+                                },
+                            },
+                            0, // 0 oznacza, że brak "in_progress", więc dostępny
+                        ],
+                    },
+                },
             }
-            if (orConditions.length > 0) {
-                pipeline.push({
-                    $match: {
-                        $or: orConditions
-                    }
-                });
-            }
+        );
+
+        if (available !== undefined) {
+            pipeline.push({
+                $match: {
+                    availability: available === 'true',
+                },
+            });
         }
 
         pipeline.push({
-            $sort: sortOption
+            $sort: sortOption,
         });
 
         const drivers = await DriversView.aggregate(pipeline);
@@ -46,10 +68,6 @@ router.get("/", async (req, res) => {
         res.status(500).json({ message: "An error occurred while fetching the drivers." });
     }
 });
-
-
-
-
 
 
 router.get("/:id", async (req, res) => {
@@ -86,7 +104,6 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
-
         if (!email || !password) {
             return res.status(400).json({ message: "Email and password are required." });
         }

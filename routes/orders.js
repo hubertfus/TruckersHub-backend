@@ -2,7 +2,6 @@ const router = require('express').Router();
 const mongoose = require('mongoose');
 const Order = require('../models/order');
 const User = require('../models/user');
-const updateDriverAvailability = require('../services/updateDriverAvailability');
 
 const isAuthorized = async (order, action, userId) => {
     try {
@@ -40,22 +39,28 @@ const isAuthorized = async (order, action, userId) => {
 router.get('/', async (req, res) => {
     try {
         const { driverId, role, createdAndWtihNoVehicleAssigned } = req.query;
-
-        const matchConditions = role === 'dispatcher'
-            ?  createdAndWtihNoVehicleAssigned ? { vehicle_id: null, status: "in_progress"} : {} 
-            : {
+            
+        let matchConditions = {};
+        if (role === 'dispatcher') {
+            if (createdAndWtihNoVehicleAssigned === 'true') {
+                matchConditions = { vehicle_id: null }; 
+            }
+        } else {
+            matchConditions = {
                 $or: [
                     { assigned_driver: new mongoose.Types.ObjectId(driverId) },
                     { assigned_driver: null },
                 ]
             };
+        }
+
         const orders = await Order.aggregate([
             {
                 $match: matchConditions
             },
             {
                 $lookup: {
-                    from: "users", 
+                    from: "users",
                     localField: "assigned_driver",
                     foreignField: "_id",
                     as: "driver_details"
@@ -63,7 +68,7 @@ router.get('/', async (req, res) => {
             },
             {
                 $lookup: {
-                    from: "vehicles", 
+                    from: "vehicles",
                     localField: "vehicle_id",
                     foreignField: "_id",
                     as: "vehicle_details"
@@ -81,7 +86,7 @@ router.get('/', async (req, res) => {
                                     " ",
                                     { $arrayElemAt: ["$vehicle_details.model", 0] },
                                     " ",
-                                    { $arrayElemAt: ["$vehicle_details.license_plate", 0] } 
+                                    { $arrayElemAt: ["$vehicle_details.license_plate", 0] }
                                 ]
                             },
                             else: "No Vehicle Assigned"
@@ -99,10 +104,9 @@ router.get('/', async (req, res) => {
                 }
             }
         ]);
-
-        res.status(200).json(orders); 
-    } catch (error) {
-        console.error('Error in fetching orders:', error); 
+            res.status(200).json(orders);
+        } catch (error) {
+        console.error('Error in fetching orders:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -184,7 +188,6 @@ router.post('/complete', async (req, res) => {
         if (!isAuthorized(order, 'complete', userId)) {
             return res.status(403).json({ message: "Unauthorized action" });
         }
-
         const updatedOrder = await Order.findByIdAndUpdate(
             orderId,
             { status: 'completed' },
@@ -218,7 +221,6 @@ router.delete('/:id', async (req, res) => {
         }
 
         await Order.findByIdAndDelete(orderId);
-        updateDriverAvailability(order.assigned_driver)
         res.status(200).json({ message: "Order deleted successfully" });
     } catch (error) {
         console.error("Error deleting order:", error);
@@ -385,7 +387,6 @@ router.post('/assign-driver', async (req, res) => {
 
         driver.availability = false;
         await driver.save({ session });
-        updateDriverAvailability(oldDriver)
         if (session) await session.commitTransaction();
 
         res.status(200).json({
@@ -476,15 +477,18 @@ router.put('/update', async (req, res) => {
         }
 
         const order = await Order.findById(orderId).session(session);
+        console.log(updatedOrderData.status,order.status)
         if (!order) {
             throw new Error("Order not found");
         }
-
         const dispatcher = await User.findById(dispatcherId).session(session);
         if (!dispatcher || dispatcher.role !== 'dispatcher') {
             throw new Error("Dispatcher not found or invalid role");
         }
-
+        updatedOrderData.assigned_driver = order.assigned_driver
+        updatedOrderData.vehicle_id = order.vehicle_id
+        updatedOrderData.status = order.status
+        
         order.set(updatedOrderData);
 
         await order.save({ session });
