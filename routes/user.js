@@ -41,7 +41,7 @@ router.get("/", async (req, res) => {
                                     },
                                 },
                             },
-                            0, // 0 oznacza, że brak "in_progress", więc dostępny
+                            0, 
                         ],
                     },
                 },
@@ -62,8 +62,10 @@ router.get("/", async (req, res) => {
 
         const drivers = await DriversView.aggregate(pipeline);
 
-        res.json(drivers);
-    } catch (error) {
+        res.json({
+            message: "Drivers fetched successfully",
+            drivers: drivers,
+        });    } catch (error) {
         console.error("Error fetching drivers:", error.message);
         res.status(500).json({ message: "An error occurred while fetching the drivers." });
     }

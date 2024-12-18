@@ -104,7 +104,7 @@ router.get('/', async (req, res) => {
                 }
             }
         ]);
-            res.status(200).json(orders);
+            res.status(200).json({ message: "Orders fetched successfully", data: orders });
         } catch (error) {
         console.error('Error in fetching orders:', error);
         res.status(500).json({ error: error.message });
@@ -134,7 +134,7 @@ router.post('/accept', async (req, res) => {
             { new: true }
         );
         
-        res.status(200).json(updatedOrder);
+        res.status(200).json({ message: "Order accepted successfully", data: updatedOrder });
     } catch (error) {
         console.error("Error processing order accept:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -165,7 +165,7 @@ router.post('/cancel', async (req, res) => {
             { new: true } 
         );
 
-        res.status(200).json(updatedOrder);
+        res.status(200).json({ message: "Order cancelled successfully", data: updatedOrder });
     } catch (error) {
         console.error("Error canceling order:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -194,7 +194,7 @@ router.post('/complete', async (req, res) => {
             { new: true } 
         );
 
-        res.status(200).json(updatedOrder);
+        res.status(200).json({ message: "Order completed successfully", data: updatedOrder });
     } catch (error) {
         console.error("Error completing order:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -335,7 +335,7 @@ router.post('/create', async (req, res) => {
     
         if (session) await session.commitTransaction();
     
-        res.status(201).json(savedOrder);
+        res.status(201).json({ message: "Order created successfully", data: savedOrder });
     } catch (error) {
         if (session) await session.abortTransaction();
         console.error("Error creating new order:", error);
