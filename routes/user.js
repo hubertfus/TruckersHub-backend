@@ -74,11 +74,84 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
-        if (!user) return res.status(404).json({ message: "User not found" });
-        res.json(user);
+        const userId = req.params.id;
+
+        const pipeline = [
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(userId),
+                },
+            },
+            {
+                $lookup: {
+                    from: "orders", 
+                    localField: "_id",
+                    foreignField: "assigned_driver",
+                    as: "user_orders",
+                },
+            },
+            {
+                $addFields: {
+                    current_order: {
+                        $arrayElemAt: [
+                            {
+                                $filter: {
+                                    input: "$user_orders",
+                                    as: "order",
+                                    cond: { $eq: ["$$order.status", "in_progress"] },
+                                },
+                            },
+                            0,
+                        ],
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: "vehicles", 
+                    localField: "current_order.vehicle_id",
+                    foreignField: "_id",
+                    as: "current_vehicle",
+                },
+            },
+            {
+                $addFields: {
+                    current_vehicle: { $arrayElemAt: ["$current_vehicle", 0] },
+                    completed_or_cancelled_orders: {
+                        $filter: {
+                            input: "$user_orders",
+                            as: "order",
+                            cond: {
+                                $or: [
+                                    { $eq: ["$$order.status", "completed"] },
+                                    { $eq: ["$$order.status", "cancelled"] },
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                $project: {
+                    password: 0, 
+                    user_orders: 0, 
+                },
+            },
+        ];
+
+        const userDetails = await User.aggregate(pipeline);
+
+        if (!userDetails || userDetails.length === 0) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({
+            message: "User details fetched successfully",
+            user: userDetails[0],
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error fetching user details:", error.message);
+        res.status(500).json({ message: "An error occurred while fetching user details." });
     }
 });
 
