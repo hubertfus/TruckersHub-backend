@@ -54,6 +54,55 @@ router.get("/", async (req, res) => {
     }
 });
 
+router.get("/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({ message: "Vehicle ID is required." });
+        }
+
+       
+        const objectId = new mongoose.Types.ObjectId(id);
+
+        const vehicle = await Vehicle.aggregate([
+            {
+                $match: { _id: objectId },
+            },
+            {
+                $lookup: {
+                    from: "orders",
+                    localField: "_id",
+                    foreignField: "vehicle_id",
+                    as: "orders",
+                },
+            },
+            {
+                $addFields: {
+                    isInUse: { $gt: [{ $size: "$orders" }, 0] },
+                },
+            },
+            {
+                $project: {
+                    orders: 0, 
+                },
+            },
+        ]);
+
+        if (vehicle.length === 0) {
+            return res.status(404).json({ message: "Vehicle not found." });
+        }
+
+        res.status(200).json({
+            message: "Vehicle fetched successfully.",
+            vehicle: vehicle[0],
+        });
+    } catch (error) {
+        console.error("Error fetching vehicle by ID:", error.message);
+        res.status(500).json({ message: "An error occurred while fetching the vehicle." });
+    }
+});
+
 router.post("/add-vehicle", async (req, res) => {
     try {
         const {
