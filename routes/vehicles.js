@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const mongoose = require("mongoose");
 const Vehicle = require("../models/Vehicle");
+const Order = require("../models/order");
 const { validateAuthorization } = require("../authMiddleware");
 
 router.get("/", async (req, res) => {
@@ -215,26 +216,58 @@ router.delete(
     await validateAuthorization(req, res, next, "delete");
   },
   async (req, res) => {
+    let session = null;
+
     try {
+      if (
+        mongoose.connection.readyState === 1 &&
+        mongoose.connection.client.s.options.replicaSet
+      ) {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      }
+
       const { id } = req.params;
 
       if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        if (session) await session.abortTransaction();
+        if (session) session.endSession();
         return res.status(400).json({ message: "Invalid vehicle ID." });
       }
 
       const vehicle = await Vehicle.findById(id);
       if (!vehicle) {
+        if (session) await session.abortTransaction();
+        if (session) session.endSession();
         return res.status(404).json({ message: "Vehicle not found." });
       }
 
-      await Vehicle.findByIdAndDelete(id);
+      // Usuń pojazd
+      await Vehicle.findByIdAndDelete(id, { session });
 
-      res.status(200).json({ message: "Vehicle deleted successfully." });
-    } catch (error) {
-      console.error("Error deleting vehicle:", error.message);
+      // Ustaw vehicle_id na null dla powiązanych zamówień
+      await Order.updateMany(
+        { vehicle_id: id },
+        { $set: { vehicle_id: null } },
+        { session }
+      );
+
+      if (session) await session.commitTransaction();
       res
-        .status(500)
-        .json({ message: "An error occurred while deleting the vehicle." });
+        .status(200)
+        .json({ message: "Vehicle deleted successfully and orders updated." });
+    } catch (error) {
+      if (session) await session.abortTransaction();
+      console.error(
+        "Error deleting vehicle and updating orders:",
+        error.message
+      );
+      res.status(500).json({
+        message:
+          "An error occurred while deleting the vehicle and updating orders.",
+      });
+    } finally {
+      if (session) session.endSession();
     }
   }
 );

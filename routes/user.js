@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const bcrypt = require("bcrypt");
 const User = require("../models/user");
+const Order = require("../models/order");
 const DriversView = require("../models/Driversview");
 const mongoose = require("mongoose");
 const { validateAuthorization } = require("../authMiddleware");
@@ -188,7 +189,6 @@ router.post("/register", async (req, res) => {
       .json({ message: "User registered successfully.", userId: newUser._id });
   } catch (error) {
     res.status(500).json({ message: error.message });
-    console.log(error.message);
   }
 });
 
@@ -240,11 +240,6 @@ router.put(
         });
       }
 
-      const user = await User.findById(req.params.id);
-      if (!user) {
-        return res.status(404).json({ message: "User not found." });
-      }
-
       const existingEmail = await User.findOne({ email });
       if (existingEmail && existingEmail._id.toString() !== req.params.id) {
         return res
@@ -284,26 +279,52 @@ router.delete(
     await validateAuthorization(req, res, next, "delete");
   },
   async (req, res) => {
+    let session = null;
+
     try {
+      if (
+        mongoose.connection.readyState === 1 &&
+        mongoose.connection.client.s.options.replicaSet
+      ) {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      }
       const { id } = req.params;
 
       if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        if (session) {
+          await session.abortTransaction();
+          session.endSession();
+        }
         return res.status(400).json({ message: "Invalid user ID." });
       }
 
-      const user = await User.findById(id);
-      if (!user) {
-        return res.status(404).json({ message: "User not found." });
+      await User.findByIdAndDelete(id, session ? { session } : undefined);
+
+      await Order.updateMany(
+        { assigned_driver: id },
+        { $set: { assigned_driver: null } },
+        { session }
+      );
+
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
       }
 
-      await User.findByIdAndDelete(id);
-
-      res.status(200).json({ message: "User deleted successfully." });
-    } catch (error) {
-      console.error("Error deleting user:", error.message);
       res
-        .status(500)
-        .json({ message: "An error occurred while deleting the user." });
+        .status(200)
+        .json({ message: "User deleted successfully and orders updated." });
+    } catch (error) {
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
+      console.error("Error deleting user and updating orders:", error.message);
+      res.status(500).json({
+        message:
+          "An error occurred while deleting the user and updating orders.",
+      });
     }
   }
 );

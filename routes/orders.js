@@ -307,8 +307,6 @@ router.post(
       !pickup_address ||
       !delivery_address
     ) {
-      console.log("cwel2");
-
       return res.status(400).json({ message: "Missing required fields." });
     }
 
@@ -403,7 +401,6 @@ router.post(
 
       await order.save({ session });
 
-      driver.availability = false;
       await driver.save({ session });
       if (session) await session.commitTransaction();
 
@@ -520,7 +517,6 @@ router.put(
       }
 
       const order = await Order.findById(orderId).session(session);
-      console.log(updatedOrderData.status, order.status);
       if (!order) {
         throw new Error("Order not found");
       }
