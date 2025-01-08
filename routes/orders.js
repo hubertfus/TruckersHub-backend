@@ -301,6 +301,15 @@ router.post(
       estimated_delivery_time,
     } = req.body.newOrder;
 
+    const { weight, dimensions } = load_details;
+    const { length, width, height } = dimensions;
+
+    if (weight <= 0 || length <= 0 || width <= 0 || height <= 0) {
+      return res.status(400).json({
+        message: "Negative or zero values are not allowed in load details.",
+      });
+    }
+
     if (
       !order_number ||
       !load_details ||
@@ -505,6 +514,18 @@ router.put(
       });
     }
 
+    const { load_details } = updatedOrderData;
+    if (load_details) {
+      const { weight, dimensions } = load_details;
+      const { length, width, height } = dimensions;
+
+      if (weight <= 0 || length <= 0 || width <= 0 || height <= 0) {
+        return res.status(400).json({
+          message: "Negative or zero values are not allowed in load details.",
+        });
+      }
+    }
+
     let session = null;
 
     try {
@@ -524,8 +545,11 @@ router.put(
       if (!dispatcher || dispatcher.role !== "dispatcher") {
         throw new Error("Dispatcher not found or invalid role");
       }
-      updatedOrderData.assigned_driver = order.assigned_driver;
-      updatedOrderData.vehicle_id = order.vehicle_id;
+
+      updatedOrderData.assigned_driver =
+        order.assigned_driver || updatedOrderData.assigned_driver;
+      updatedOrderData.vehicle_id =
+        order.vehicle_id || updatedOrderData.vehicle_id;
       updatedOrderData.status = order.status;
 
       order.set(updatedOrderData);
