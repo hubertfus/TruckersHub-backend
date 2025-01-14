@@ -240,8 +240,8 @@ router.put(
         });
       }
 
-      const existingEmail = await User.findOne({ email });
-      if (existingEmail && existingEmail._id.toString() !== req.params.id) {
+      const user = await User.findOne({ email });
+      if (user && user._id.toString() !== req.params.id) {
         return res
           .status(400)
           .json({ message: "Email is already in use by another user." });
